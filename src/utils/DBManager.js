@@ -7,6 +7,86 @@ db.version(1).stores({
   complaints: '++id, innOrUrl, violationType, status, timestamp'
 });
 
+export const seedDatabase = async () => {
+  // Очистка текущих данных (опционально)
+  await db.checks_history.clear();
+  await db.complaints.clear();
+
+  // 1. Тестовые данные для истории проверок (последние 100 записей по ТЗ) [2]
+  const testChecks = [
+    {
+      innOrUrl: 'sberbank-login.ru',
+      type: 'site',
+      riskScore: 95, // фишинг (+50) + блокировка (+30) + SSL (+15)
+      riskLevel: 'КРИТИЧЕСКИЙ',
+      timestamp: Date.now() - 1000 * 60 * 60 * 2 // 2 часа назад
+    },
+    {
+      innOrUrl: '77023241771', // ИНН из ТЗ [4]
+      type: 'organization',
+      riskScore: 0,
+      riskLevel: 'НИЗКИЙ',
+      timestamp: Date.now() - 1000 * 60 * 60 * 24 // 1 день назад
+    },
+    {
+      innOrUrl: 'crypto-trust.net',
+      type: 'site',
+      riskScore: 70, // новый домен (+5) + фишинг (+50) + SSL (+15)
+      riskLevel: 'ВЫСОКИЙ',
+      timestamp: Date.now() - 1000 * 60 * 60 * 48 // 2 дня назад
+    },
+    {
+      innOrUrl: 'gosuslugi-verify.com',
+      type: 'site',
+      riskScore: 85,
+      riskLevel: 'КРИТИЧЕСКИЙ',
+      timestamp: Date.now() - 1000 * 60 * 60 * 5 // 5 часов назад
+    }
+  ];
+
+  // Добавление проверок в БД
+  await db.checks_history.bulkAdd(testChecks);
+
+  // 2. Тестовые данные для системы жалоб [1, 5]
+  const testComplaints = [
+    {
+      innOrUrl: 'sberbank-login.ru',
+      violationType: 'Фишинг',
+      description: 'Сайт полностью копирует дизайн личного кабинета банка для кражи паролей.',
+      evidence: null, // Здесь может быть base64 строка изображения [1]
+      email: 'user1@example.com',
+      timestamp: Date.now() - 1000 * 60 * 30,
+      status: 'ожидает модерации',
+      votes: 12 // Положительный рейтинг [6]
+    },
+    {
+      innOrUrl: '77023241771',
+      violationType: 'Утечка',
+      description: 'База данных клиентов этой организации была обнаружена в открытом доступе.',
+      evidence: null,
+      email: 'security_audit@test.ru',
+      timestamp: Date.now() - 1000 * 60 * 60 * 10,
+      status: 'на модерации',
+      votes: 5
+    },
+    {
+      innOrUrl: 'bad-ads.com',
+      violationType: 'Спам',
+      description: 'Рассылка нежелательной рекламы по почте без согласия.',
+      evidence: null,
+      email: null,
+      timestamp: Date.now() - 1000 * 60 * 5,
+      status: 'отклонена автоматически', // Пример срабатывания стоп-слова "реклама" [7]
+      votes: -2
+    }
+  ];
+
+  await db.complaints.bulkAdd(testComplaints);
+  console.log('Тестовые данные успешно добавлены в IndexedDB');
+};
+
+// seedDatabase();
+
 export const saveCheckResult = async (result) => {
   await db.checks_history.add({
     innOrUrl: result.target,
@@ -30,6 +110,8 @@ export const getDashboardStats = async () => {
     .reverse()
     .limit(100)
     .toArray();
+
+console.log(history);
 
   const complaints = await db.complaints.toArray();
 
